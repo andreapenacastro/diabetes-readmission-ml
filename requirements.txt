@@ -1,0 +1,11 @@
+scikit-learn
+pandas
+numpy
+optuna
+shap
+fairlearn
+matplotlib
+pyyaml
+fastapi
+uvicorn
+seaborn

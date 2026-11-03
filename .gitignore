@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Our project
+data/
+*.pkl
+*.joblib
+.DS_Store
