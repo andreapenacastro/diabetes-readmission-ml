@@ -79,13 +79,39 @@ def load_dataset() -> pd.DataFrame:
 # Cleaning
 # --------------------------------------------------------------------------- #
 def remove_impossible_readmissions(df: pd.DataFrame, exclude_ids) -> pd.DataFrame:
-    """Drop encounters that ended in death or hospice (EDA finding 5).
+    """Drop encounters whose discharge code is in `exclude_ids` (EDA finding 5).
 
-    These patients cannot be readmitted, so keeping them would teach the
-    model a pattern that has nothing to do with readmission risk.
+    Used for deaths (a readmission is impossible) and hospice (end-of-life
+    care, where preventing a readmission is not the goal).
     """
     keep = ~df["discharge_disposition_id"].isin(exclude_ids)
     return df.loc[keep].reset_index(drop=True)
+
+
+def excluded_discharge_ids(cfg: dict) -> list:
+    """Death codes, plus hospice codes if the config says to exclude them."""
+    ids = list(cfg["data"]["death_discharge_ids"])
+    if cfg["data"].get("exclude_hospice", True):
+        ids += list(cfg["data"]["hospice_discharge_ids"])
+    return ids
+
+
+def clean_dataset(df: pd.DataFrame, cfg: dict, verbose: bool = False) -> pd.DataFrame:
+    """Apply every row filter decided in the EDA.
+
+    1. Remove deaths (and hospice, see config) -> cannot / should not be readmitted.
+    2. Remove the 3 rows with gender 'Unknown/Invalid'.
+    """
+    n0 = len(df)
+    df = remove_impossible_readmissions(df, excluded_discharge_ids(cfg))
+    n1 = len(df)
+    bad_gender = df["gender"].isin(cfg["data"]["drop_gender_values"])
+    df = df.loc[~bad_gender].reset_index(drop=True)
+    if verbose:
+        print(f"Removed {n0 - n1:,} death / hospice encounters")
+        print(f"Removed {bad_gender.sum():,} rows with invalid gender")
+        print(f"Rows left: {len(df):,} (from {n0:,})")
+    return df
 
 
 # --------------------------------------------------------------------------- #
@@ -142,8 +168,7 @@ def check_splits(splits: dict) -> pd.DataFrame:
 def build_splits(cfg: dict | None = None):
     """Load, clean and split the data using the settings in config.yaml."""
     cfg = cfg or load_config()
-    df = load_dataset()
-    df = remove_impossible_readmissions(df, cfg["data"]["exclude_discharge_ids"])
+    df = clean_dataset(load_dataset(), cfg, verbose=True)
     return split_train_val_test(
         df,
         test_n_splits=cfg["split"]["test_n_splits"],

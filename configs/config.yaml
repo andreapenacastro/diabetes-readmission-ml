@@ -3,11 +3,14 @@ seed: 42
 
 data:
   openml_id: 4541
-  target: readmit_30          # 1 = readmitted within 30 days
-  group_col: patient_nbr      # one patient must never appear in two splits
-  # Discharges after which a readmission is impossible or meaningless:
-  # 11 = expired, 13/14 = hospice, 19/20/21 = expired (home / facility / unknown)
-  exclude_discharge_ids: [11, 13, 14, 19, 20, 21]
+  target: readmit_30          # 1 = readmitted within 30 days ("<30"); ">30" and "NO" = 0
+  group_col: patient_nbr      # used ONLY as `groups` for splitting, never as a feature
+  id_cols: [encounter_id, patient_nbr]   # identifiers, removed from the features
+  # discharge_disposition_id codes, from IDs_mapping.csv (UCI version of the dataset)
+  death_discharge_ids: [11, 19, 20, 21]  # 11 expired; 19/20/21 expired at home / in a facility / place unknown
+  hospice_discharge_ids: [13, 14]        # 13 hospice at home, 14 hospice in a medical facility
+  exclude_hospice: true                  # decision justified in notebooks/01_eda.ipynb, section 7
+  drop_gender_values: ["Unknown/Invalid"]  # 3 rows
 
 split:
   # StratifiedGroupKFold: grouped by patient AND stratified on the target
@@ -16,3 +19,6 @@ split:
 
 cv:
   n_splits: 5        # cross-validation inside the training set (Optuna)
+
+fairness:
+  sensitive_attribute: race
