@@ -103,3 +103,20 @@ def prepare_features(df):
         X[col] = s.where(s.isna(), s.astype(str))
     y = df["readmit_30"] if "readmit_30" in df.columns else None
     return X, y
+
+# Repris du cours S6 (Pipeline + ColumnTransformer) = adapté à nos colonnes
+def build_preprocessor():
+    numeric_pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy="median")),  # médiane apprise sur le train only
+        ("scaler", StandardScaler()),
+    ])
+    categorical_pipeline = Pipeline([
+        # notre choix vs S6 (most_frequent) : un manquant devient "Missing" (EDA = 6)
+        ("imputer", SimpleImputer(strategy="constant", fill_value="Missing")),
+        ("encoder", OneHotEncoder(handle_unknown="ignore")),
+    ])
+    return ColumnTransformer([
+        ("num", numeric_pipeline, NUM_FEATURES),
+        ("cat", categorical_pipeline, CAT_FEATURES),
+    ])
+
