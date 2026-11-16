@@ -1,6 +1,15 @@
 """Feature engineering helpers."""
 import pandas as pd
 
+# ajout des bibliothèques et autres pour features engineering (grace EDA d'andréa)
+import numpy as np
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+from src.data import MED_COLS
+
 
 def icd9_family(code) -> str:
     """Map an ICD-9 diagnosis code to a broad disease family.
@@ -42,3 +51,26 @@ def add_diag_families(df: pd.DataFrame) -> pd.DataFrame:
     for col in ("diag_1", "diag_2", "diag_3"):
         df[f"{col}_family"] = df[col].map(icd9_family)
     return df
+
+
+# Étape 2 : feature engineering 
+
+# médicaments jamais prescrits =9 => on enlève (décidé avec EDA d Andrea)
+NEVER_USED_MEDS = [
+    "citoglipton", "examide", "metformin.pioglitazone", "glimepiride.pioglitazone",
+    "acetohexamide", "metformin.rosiglitazone", "troglitazone",
+]
+USED_MEDS = [m for m in MED_COLS if m not in NEVER_USED_MEDS]
+
+
+# features trouvés grace à l'EDA : total_prior_visits et age_num proposées avec aide IA
+def add_engineered_features(df):
+    """Nos features créées (calculs ligne par ligne, pas de fuite)."""
+    df = add_diag_families(df)
+    # nb de traitements modifiés = 8
+    df["n_meds_changed"] = df[USED_MEDS].astype(str).isin(["Up", "Down"]).sum(axis=1)
+    # total des visites passées = 3
+    df["total_prior_visits"] = df["number_outpatient"] + df["number_emergency"] + df["number_inpatient"]
+    # "[70-80)" -> 75 pour garder l'ordre des âges 
+    df["age_num"] = df["age"].astype(str).str.extract(r"\[(\d+)-")[0].astype(float) + 5
+    return df 
