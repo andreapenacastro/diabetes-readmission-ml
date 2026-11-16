@@ -91,3 +91,34 @@ def compare_imbalance_remedy(X_train, y_train, X_val, y_val, seed=42):
         res = evaluate_model(f"LogReg class_weight={weight}", model, X_train, y_train, X_val, y_val)
         rows.append(res)
     return pd.DataFrame(rows).set_index("model")
+
+
+
+def main():
+    cfg = load_config()
+    seed = cfg["seed"]
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    X_train, y_train, X_val, y_val = load_splits()
+
+    # score à battre : un modèle au hasard a une PR-AUC = 11 % (part de réadmis) (aide IA)
+    print(f"Prévalence val (baseline PR-AUC) : {y_val.mean():.3f}\n")
+
+    # utilisation étape 3
+    remedy = compare_imbalance_remedy(X_train, y_train, X_val, y_val, seed)
+    print("Remède au déséquilibre (LogReg, validation) :")
+    print(remedy.round(4).to_string(), "\n")
+    remedy.to_csv(RESULTS_DIR / "imbalance_remedy.csv")
+
+    # Étape 4 : les 3 modèles, mêmes métriques, même validation set (inspiré du Homework 5 de la prof )
+    results = []
+    for name, pipe in make_models(seed).items():
+        results.append(evaluate_model(name, pipe, X_train, y_train, X_val, y_val))
+        joblib.dump(pipe, MODEL_DIR / f"{name.lower().replace(' ', '_')}_baseline.joblib")
+    comparison = pd.DataFrame(results).set_index("model").sort_values("pr_auc", ascending=False)
+    print("Comparaison des 3 modèles (validation) :")
+    print(comparison.round(4).to_string())
+    comparison.to_csv(RESULTS_DIR / "model_comparison.csv")
+
+
+if __name__ == "__main__":
+    main()
