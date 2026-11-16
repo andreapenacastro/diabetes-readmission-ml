@@ -1,9 +1,20 @@
-"""Loading the Diabetes 130-US Hospitals dataset (OpenML 4541) and building the target."""
+"""Data loading, cleaning and splitting for Diabetes 130-US Hospitals (OpenML 4541).
+
+Run from the project root to build and save the train / validation / test sets:
+
+    python -m src.data
+"""
 import numpy as np
 import pandas as pd
+import yaml
 from sklearn.datasets import fetch_openml
+from sklearn.model_selection import StratifiedGroupKFold
+
+from src.paths import CONFIG_PATH, DATA_DIR
 
 OPENML_ID = 4541
+TARGET = "readmit_30"
+GROUP_COL = "patient_nbr"
 
 # The 23 diabetes medication columns (values: No / Steady / Up / Down)
 MED_COLS = [
@@ -16,6 +27,18 @@ MED_COLS = [
 ]
 
 
+# --------------------------------------------------------------------------- #
+# Config
+# --------------------------------------------------------------------------- #
+def load_config(path=CONFIG_PATH) -> dict:
+    """Read configs/config.yaml."""
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+# --------------------------------------------------------------------------- #
+# Loading
+# --------------------------------------------------------------------------- #
 def load_raw() -> pd.DataFrame:
     """Download (or read from the local sklearn cache) the raw dataset.
 
@@ -31,7 +54,7 @@ def load_raw() -> pd.DataFrame:
 def add_target(df: pd.DataFrame) -> pd.DataFrame:
     """Add the binary target: 1 if readmitted within 30 days, else 0."""
     df = df.copy()
-    df["readmit_30"] = (df["target"] == "<30").astype(int)
+    df[TARGET] = (df["target"] == "<30").astype(int)
     return df
 
 
@@ -50,3 +73,94 @@ def mark_missing(df: pd.DataFrame) -> pd.DataFrame:
 def load_dataset() -> pd.DataFrame:
     """Raw data + binary target. Missing values are still written as '?'."""
     return add_target(load_raw())
+
+
+# --------------------------------------------------------------------------- #
+# Cleaning
+# --------------------------------------------------------------------------- #
+def remove_impossible_readmissions(df: pd.DataFrame, exclude_ids) -> pd.DataFrame:
+    """Drop encounters that ended in death or hospice (EDA finding 5).
+
+    These patients cannot be readmitted, so keeping them would teach the
+    model a pattern that has nothing to do with readmission risk.
+    """
+    keep = ~df["discharge_disposition_id"].isin(exclude_ids)
+    return df.loc[keep].reset_index(drop=True)
+
+
+# --------------------------------------------------------------------------- #
+# Splitting
+# --------------------------------------------------------------------------- #
+def make_cv(n_splits: int, seed: int) -> StratifiedGroupKFold:
+    """Cross-validator that is grouped by patient AND stratified on the target.
+
+    Use the same object for Optuna's cross-validation inside the training
+    set, passing groups=train[GROUP_COL].
+    """
+    return StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+
+
+def _one_fold(df: pd.DataFrame, n_splits: int, seed: int):
+    """Hold out one fold of a StratifiedGroupKFold: (rest, held_out)."""
+    cv = make_cv(n_splits, seed)
+    rest_idx, held_idx = next(cv.split(df, df[TARGET], groups=df[GROUP_COL]))
+    return df.iloc[rest_idx].reset_index(drop=True), df.iloc[held_idx].reset_index(drop=True)
+
+
+def split_train_val_test(df: pd.DataFrame, test_n_splits: int = 5,
+                         val_n_splits: int = 5, seed: int = 42):
+    """Split into train / validation / test, grouped by patient and stratified.
+
+    - grouped: the same patient never appears in two different sets;
+    - stratified: each set keeps about the same share of positives (~11%).
+
+    GroupShuffleSplit is grouped but NOT stratified, which is why we use
+    StratifiedGroupKFold and keep a single fold each time.
+    """
+    train_val, test = _one_fold(df, test_n_splits, seed)
+    train, val = _one_fold(train_val, val_n_splits, seed)
+    return train, val, test
+
+
+def check_splits(splits: dict) -> pd.DataFrame:
+    """Check that no patient is shared between splits and report class balance."""
+    names = list(splits)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            shared = set(splits[a][GROUP_COL]) & set(splits[b][GROUP_COL])
+            assert not shared, f"{len(shared)} patients appear in both {a} and {b}"
+
+    total = sum(len(s) for s in splits.values())
+    return pd.DataFrame({
+        "rows": {k: len(s) for k, s in splits.items()},
+        "share_of_rows": {k: round(len(s) / total, 3) for k, s in splits.items()},
+        "patients": {k: s[GROUP_COL].nunique() for k, s in splits.items()},
+        "positive_rate": {k: round(s[TARGET].mean(), 4) for k, s in splits.items()},
+    })
+
+
+def build_splits(cfg: dict | None = None):
+    """Load, clean and split the data using the settings in config.yaml."""
+    cfg = cfg or load_config()
+    df = load_dataset()
+    df = remove_impossible_readmissions(df, cfg["data"]["exclude_discharge_ids"])
+    return split_train_val_test(
+        df,
+        test_n_splits=cfg["split"]["test_n_splits"],
+        val_n_splits=cfg["split"]["val_n_splits"],
+        seed=cfg["seed"],
+    )
+
+
+def main():
+    cfg = load_config()
+    train, val, test = build_splits(cfg)
+    splits = {"train": train, "val": val, "test": test}
+    print(check_splits(splits))
+    for name, part in splits.items():
+        part.to_pickle(DATA_DIR / f"{name}.pkl")
+    print(f"Saved train / val / test to {DATA_DIR}")
+
+
+if __name__ == "__main__":
+    main()

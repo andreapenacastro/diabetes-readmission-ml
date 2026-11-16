@@ -1,0 +1,18 @@
+# Shared settings for every script in src/
+seed: 42
+
+data:
+  openml_id: 4541
+  target: readmit_30          # 1 = readmitted within 30 days
+  group_col: patient_nbr      # one patient must never appear in two splits
+  # Discharges after which a readmission is impossible or meaningless:
+  # 11 = expired, 13/14 = hospice, 19/20/21 = expired (home / facility / unknown)
+  exclude_discharge_ids: [11, 13, 14, 19, 20, 21]
+
+split:
+  # StratifiedGroupKFold: grouped by patient AND stratified on the target
+  test_n_splits: 5   # 1 fold out of 5 -> test set (~20% of patients)
+  val_n_splits: 5    # 1 fold out of 5 of what remains -> validation (~16%)
+
+cv:
+  n_splits: 5        # cross-validation inside the training set (Optuna)
