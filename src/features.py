@@ -74,3 +74,32 @@ def add_engineered_features(df):
     # "[70-80)" -> 75 pour garder l'ordre des âges 
     df["age_num"] = df["age"].astype(str).str.extract(r"\[(\d+)-")[0].astype(float) + 5
     return df 
+
+
+# liste explicite des features : patient_nbr, encounter_id et la cible n'y sont pas
+NUM_FEATURES = [
+    "time_in_hospital", "num_lab_procedures", "num_procedures", "num_medications",
+    "number_outpatient", "number_emergency", "number_inpatient", "number_diagnoses",
+    "age_num", "total_prior_visits", "n_meds_changed",
+]
+# les *_id sont des codes sans ordre -> catégories, pas de scaling (cf. S6)
+CAT_FEATURES = [
+    "gender", "admission_type_id", "discharge_disposition_id", "admission_source_id",
+    "medical_specialty", "payer_code", "diag_1_family", "diag_2_family", "diag_3_family",
+    "max_glu_serum", "A1Cresult", "change", "diabetesMed",
+] + USED_MEDS
+# pas gardés : weight (97 % manquant), diag bruts (-> familles), age (-> age_num),
+# race : c'est l'attribut sensible du dataset ("All three include a genuine sensitive attribute", consigne étape 10) -> gardé pour l'audit fairness, pas mis dans le modèle
+# (notre choix avec aide IA)
+
+
+def prepare_features(df):
+    """Renvoie X, y pour un split (train, val ou test)."""
+    df = add_engineered_features(df)
+    X = df[NUM_FEATURES + CAT_FEATURES].copy()
+    # catégorielles en texte pour le OneHotEncoder, les NaN restent NaN (aide IA)
+    for col in CAT_FEATURES:
+        s = X[col].astype(object).replace("?", np.nan)
+        X[col] = s.where(s.isna(), s.astype(str))
+    y = df["readmit_30"] if "readmit_30" in df.columns else None
+    return X, y
