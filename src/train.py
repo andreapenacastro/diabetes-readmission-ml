@@ -32,14 +32,15 @@ def load_splits():
     return X_train, y_train, X_val, y_val
 
 
-# Repris de evaluate_model du HW5, + PR-AUC (S7 / HW7).
-# On évalue sur le validation set, pas sur le test.
+# pour info (repris de evaluate_model du HW5, + PR-AUC (qu'on a fait dans la S7))
+# On évalue sur validation uniquement 
+
 def evaluate_model(name, model, X_train, y_train, X_val, y_val):
     start = time.perf_counter()
     model.fit(X_train, y_train)
     training_time = time.perf_counter() - start
 
-    y_pred = model.predict(X_val)  # seuil 0.5 par défaut, le vrai seuil sera choisi plus tard
+    y_pred = model.predict(X_val)  # seuil 0.5 par défaut dans predict, on recup le vrai après 
     y_proba = model.predict_proba(X_val)[:, 1]
 
     return {
@@ -49,6 +50,35 @@ def evaluate_model(name, model, X_train, y_train, X_val, y_val):
         "recall": recall_score(y_val, y_pred, zero_division=0),
         "f1": f1_score(y_val, y_pred, zero_division=0),
         "roc_auc": roc_auc_score(y_val, y_proba),
-        "pr_auc": average_precision_score(y_val, y_proba),  # baseline = prévalence (S7)
+        "pr_auc": average_precision_score(y_val, y_proba),  
         "training_time_seconds": training_time,
+    }
+
+
+# model préprocesseur + estimateur dans une pipeline (cf. S6, consigne étape 5)
+def make_pipeline(model):
+    return Pipeline([
+        ("preprocessor", build_preprocessor()),
+        ("model", model),
+    ])
+
+# Nos 3 modèles, du plus simple au plus complexe (S2 -> S5)
+# Hyperparamètres qu'on a pris des cours mais seront tunés avec Optuna (tune.py)
+def make_models(seed=42): 
+    return {
+        # baseline linéaire
+        "Logistic Regression": make_pipeline(LogisticRegression(
+            max_iter=1000, class_weight="balanced", random_state=seed, 
+            # class_weight = "balanced" aussi sur RF et LightGBM c
+        )),
+        # bagging d'arbres 
+        "Random Forest": make_pipeline(RandomForestClassifier(
+            n_estimators=300, max_depth=None, min_samples_leaf=5,
+            class_weight="balanced", random_state=seed, n_jobs=-1,
+        )),
+        # boosting 
+        "LightGBM": make_pipeline(LGBMClassifier(
+            n_estimators=300, learning_rate=0.05, num_leaves=31,
+            class_weight="balanced", random_state=seed, verbosity=-1,
+        )),
     }
