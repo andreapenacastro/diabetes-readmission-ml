@@ -82,3 +82,12 @@ def make_models(seed=42):
             class_weight="balanced", random_state=seed, verbosity=-1,
         )),
     }
+
+# Étape 3 : on test avec et sans class weight pour prouver que ça aide (j'ai repris la méthode du Homework 7)
+def compare_imbalance_remedy(X_train, y_train, X_val, y_val, seed=42):
+    rows = []
+    for weight in [None, "balanced"]:
+        model = make_pipeline(LogisticRegression(max_iter=1000, class_weight=weight, random_state=seed))
+        res = evaluate_model(f"LogReg class_weight={weight}", model, X_train, y_train, X_val, y_val)
+        rows.append(res)
+    return pd.DataFrame(rows).set_index("model")
