@@ -1,24 +1,26 @@
-# Shared settings for every script in src/
+# Shared settings for every script in src/ (guidelines, code rules)
 seed: 42
 
 data:
   openml_id: 4541
-  target: readmit_30          # 1 = readmitted within 30 days ("<30"); ">30" and "NO" = 0
-  group_col: patient_nbr      # used ONLY as `groups` for splitting, never as a feature
-  id_cols: [encounter_id, patient_nbr]   # identifiers, removed from the features
-  # discharge_disposition_id codes, from IDs_mapping.csv (UCI version of the dataset)
-  death_discharge_ids: [11, 19, 20, 21]  # 11 expired; 19/20/21 expired at home / in a facility / place unknown
+  target: readmit_30          # 1 = readmitted in <30 days; ">30" and "NO" = 0 (EDA, finding 1)
+  group_col: patient_nbr      # only used as `groups` for the split, never as a feature (cf. S1)
+  id_cols: [encounter_id, patient_nbr]   # identifiers, not quantities, so out of the features (EDA, section 4)
+  # discharge_disposition_id codes come from IDs_mapping.csv (UCI version of the dataset)
+  death_discharge_ids: [11, 19, 20, 21]  # 11 expired; 19/20/21 expired at home / in a facility / unknown (EDA, finding 5)
   hospice_discharge_ids: [13, 14]        # 13 hospice at home, 14 hospice in a medical facility
-  exclude_hospice: true                  # decision justified in notebooks/01_eda.ipynb, section 7
-  drop_gender_values: ["Unknown/Invalid"]  # 3 rows
+  exclude_hospice: true                  # our choice, explained in notebooks/01_eda.ipynb section 7 (EDA, finding 5)
+  drop_gender_values: ["Unknown/Invalid"]  # only 3 rows, too few to analyse (EDA, fairness section)
 
 split:
-  # StratifiedGroupKFold: grouped by patient AND stratified on the target
+  # grouped by patient AND stratified on the target (EDA, finding 2; cf. S1)
   test_n_splits: 5   # 1 fold out of 5 -> test set (~20% of patients)
-  val_n_splits: 5    # 1 fold out of 5 of what remains -> validation (~16%)
+  val_n_splits: 5    # 1 fold out of 5 of the rest -> validation (~16%)
 
 cv:
-  n_splits: 5        # cross-validation inside the training set (Optuna)
+  n_splits: 5        # CV inside the training set for Optuna (guidelines, step 6)
 
 fairness:
-  sensitive_attribute: race
+  sensitive_attribute: race  # for the fairness audit (guidelines, step 10)
+
+# AI assistant used to double-check the code.
