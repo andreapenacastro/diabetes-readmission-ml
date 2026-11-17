@@ -1,22 +1,20 @@
-"""Hypothesis tests and confidence intervals used to back the EDA findings."""
+"""Stat tests + confidence intervals to back our EDA findings with numbers (AI help).
+Not seen in class: an AI assistant suggested them so we could analyse the data properly."""
 import numpy as np
 import pandas as pd
 from scipy import stats
 
 
 def lump_rare(s: pd.Series, min_count: int = 100, other: str = "Other") -> pd.Series:
-    """Group categories with fewer than `min_count` rows into one 'Other' level.
-
-    The chi-square test is unreliable when expected counts are tiny (rule of
-    thumb: at least 5 per cell), and some codes here have only 2-6 rows.
-    """
+    """Group categories with < `min_count` rows into 'Other' (AI help).
+    Chi-square isn't reliable below ~5 expected per cell, and some codes have only 2-6 rows."""
     counts = s.value_counts()
     rare = counts[counts < min_count].index
     return s.astype(object).where(~s.isin(rare), other)
 
 
 def wilson_ci(successes, n, alpha: float = 0.05):
-    """Wilson score interval for a proportion (better than the normal one for small n)."""
+    """Wilson interval for a proportion, better than the normal one for small groups (AI help)."""
     successes, n = np.asarray(successes, float), np.asarray(n, float)
     z = stats.norm.ppf(1 - alpha / 2)
     p = successes / n
@@ -28,7 +26,7 @@ def wilson_ci(successes, n, alpha: float = 0.05):
 
 def rate_table(df: pd.DataFrame, col: str, target: str = "readmit_30",
                alpha: float = 0.05) -> pd.DataFrame:
-    """Readmission rate per group with its Wilson confidence interval."""
+    """Readmission rate per group + its Wilson CI (EDA, findings 4, 7, 8, 10)."""
     g = df.groupby(col, observed=True)[target].agg(positives="sum", n="count")
     g["rate"] = g["positives"] / g["n"]
     g["ci_low"], g["ci_high"] = wilson_ci(g["positives"], g["n"], alpha)
@@ -38,12 +36,8 @@ def rate_table(df: pd.DataFrame, col: str, target: str = "readmit_30",
 
 def chi2_test(df: pd.DataFrame, col: str, target: str = "readmit_30",
               min_count: int = 100) -> dict:
-    """Chi-square test of independence between a categorical feature and the target.
-
-    H0: the readmission rate is the same in every category.
-    Also returns Cramér's V (0 = no association, 1 = perfect), because with
-    ~100,000 rows even a tiny difference gives a very small p-value.
-    """
+    """Chi-square test, H0: same readmission rate in every category (AI help).
+    Also gives Cramér's V (0 to 1), since with ~100k rows even tiny gaps get a tiny p-value."""
     x = lump_rare(df[col], min_count)
     ct = pd.crosstab(x, df[target])
     chi2, p, dof, expected = stats.chi2_contingency(ct)
@@ -60,12 +54,8 @@ def chi2_test(df: pd.DataFrame, col: str, target: str = "readmit_30",
 
 
 def mannwhitney_test(df: pd.DataFrame, col: str, target: str = "readmit_30") -> dict:
-    """Mann-Whitney U test: does a numeric feature differ between readmitted and not?
-
-    H0: the two groups have the same distribution. Used instead of a t-test
-    because the counts (visits, days) are skewed, not normal.
-    Rank-biserial correlation is the effect size (-1 to 1, 0 = no effect).
-    """
+    """Mann-Whitney U, H0: same distribution for readmitted and not readmitted (AI help).
+    Not a t-test because visits / days are skewed; effect size = rank-biserial (0 = no effect)."""
     pos = df.loc[df[target] == 1, col]
     neg = df.loc[df[target] == 0, col]
     u, p = stats.mannwhitneyu(pos, neg, alternative="two-sided")
@@ -80,7 +70,9 @@ def mannwhitney_test(df: pd.DataFrame, col: str, target: str = "readmit_30") -> 
 
 
 def add_bonferroni(table: pd.DataFrame, alpha: float = 0.05) -> pd.DataFrame:
-    """Flag results that stay significant after a Bonferroni correction."""
+    """Flag what stays significant after Bonferroni, since we run many tests at once (AI help)."""
     table = table.copy()
     table["significant_bonferroni"] = table["p_value"] < alpha / len(table)
     return table
+
+# Tests suggested by an AI assistant (not seen in class), used to analyse the data in the EDA.
