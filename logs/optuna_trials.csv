@@ -1,0 +1,10 @@
+model,trial,C,cv_pr_auc_mean,cv_pr_auc_std,artifact,max_depth,min_samples_leaf,n_estimators,learning_rate,num_leaves
+Logistic Regression,0,0.03148911647956861,0.20771075934531136,0.008646276417639799,optuna_logistic_regression.png,,,,,
+Logistic Regression,1,6.3512210106407005,0.2080642149210603,0.009059136313101858,optuna_logistic_regression.png,,,,,
+Logistic Regression,2,0.847180141881998,0.20827441623057644,0.00916107456367347,optuna_logistic_regression.png + logistic_regression_tuned.joblib,,,,,
+Random Forest,0,,0.20255934922488777,0.0042394063385346485,optuna_random_forest.png,14.0,48.0,,,
+Random Forest,1,,0.20600872644652318,0.005394167863845183,optuna_random_forest.png + random_forest_tuned.joblib,23.0,30.0,,,
+Random Forest,2,,0.20283944892952666,0.005199901339656054,optuna_random_forest.png,8.0,8.0,,,
+LightGBM,0,,0.18088424454012045,0.0014169018975648251,optuna_lightgbm.png,,,287.0,0.17254716573280354,97.0
+LightGBM,1,,0.21995916507967533,0.00879610793861265,optuna_lightgbm.png + lightgbm_tuned.joblib,,,399.0,0.015958237752949748,32.0
+LightGBM,2,,0.2007955845626798,0.0061810890165948955,optuna_lightgbm.png,,,129.0,0.13394334706750485,82.0
