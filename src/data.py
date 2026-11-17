@@ -1,8 +1,5 @@
-"""Data loading, cleaning and splitting for Diabetes 130-US Hospitals (OpenML 4541).
-
-Run from the project root to build and save the train / validation / test sets:
-
-    python -m src.data
+"""Load, clean and split Diabetes 130-US Hospitals (OpenML 4541, guidelines, datasets).
+Run from the project root to save train / val / test: python -m src.data
 """
 import numpy as np
 import pandas as pd
@@ -16,7 +13,7 @@ OPENML_ID = 4541
 TARGET = "readmit_30"
 GROUP_COL = "patient_nbr"
 
-# The 23 diabetes medication columns (values: No / Steady / Up / Down)
+# the 23 diabetes drug columns (No / Steady / Up / Down), most are almost empty (EDA, finding 9)
 MED_COLS = [
     "metformin", "repaglinide", "nateglinide", "chlorpropamide", "glimepiride",
     "acetohexamide", "glipizide", "glyburide", "tolbutamide", "pioglitazone",
@@ -31,7 +28,7 @@ MED_COLS = [
 # Config
 # --------------------------------------------------------------------------- #
 def load_config(path=CONFIG_PATH) -> dict:
-    """Read configs/config.yaml."""
+    """Read the shared settings in configs/config.yaml (guidelines, code rules)."""
     with open(path) as f:
         return yaml.safe_load(f)
 
@@ -40,11 +37,8 @@ def load_config(path=CONFIG_PATH) -> dict:
 # Loading
 # --------------------------------------------------------------------------- #
 def load_raw() -> pd.DataFrame:
-    """Download (or read from the local sklearn cache) the raw dataset.
-
-    Returns one row per hospital encounter, with the original 3-class
-    target ("NO", ">30", "<30") in the column `target`.
-    """
+    """Raw data from OpenML (cached after the 1st download), one row per hospital stay.
+    The original 3-class target ("NO", ">30", "<30") stays in the column `target`."""
     ds = fetch_openml(data_id=OPENML_ID, as_frame=True)
     df = ds.data.copy()
     df["target"] = ds.target
@@ -52,14 +46,14 @@ def load_raw() -> pd.DataFrame:
 
 
 def add_target(df: pd.DataFrame) -> pd.DataFrame:
-    """Add the binary target: 1 if readmitted within 30 days, else 0."""
+    """Binary target: 1 if readmitted in less than 30 days, else 0 (EDA, finding 1)."""
     df = df.copy()
     df[TARGET] = (df["target"] == "<30").astype(int)
     return df
 
 
 def mark_missing(df: pd.DataFrame) -> pd.DataFrame:
-    """The dataset writes missing values as '?'. Replace them with NaN."""
+    """Missing values are written as '?' in this dataset, we turn them into NaN (EDA, finding 6)."""
     df = df.copy()
     for col in df.columns:
         if isinstance(df[col].dtype, pd.CategoricalDtype):
@@ -71,7 +65,7 @@ def mark_missing(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_dataset() -> pd.DataFrame:
-    """Raw data + binary target. Missing values are still written as '?'."""
+    """Raw data + binary target. The '?' are still there, mark_missing converts them."""
     return add_target(load_raw())
 
 
@@ -79,17 +73,14 @@ def load_dataset() -> pd.DataFrame:
 # Cleaning
 # --------------------------------------------------------------------------- #
 def remove_impossible_readmissions(df: pd.DataFrame, exclude_ids) -> pd.DataFrame:
-    """Drop encounters whose discharge code is in `exclude_ids` (EDA finding 5).
-
-    Used for deaths (a readmission is impossible) and hospice (end-of-life
-    care, where preventing a readmission is not the goal).
-    """
+    """Drop stays whose discharge code is in `exclude_ids` (EDA, finding 5).
+    Dead patients can't come back, and for hospice avoiding a readmission isn't the goal."""
     keep = ~df["discharge_disposition_id"].isin(exclude_ids)
     return df.loc[keep].reset_index(drop=True)
 
 
 def excluded_discharge_ids(cfg: dict) -> list:
-    """Death codes, plus hospice codes if the config says to exclude them."""
+    """Death codes, + hospice codes if exclude_hospice is on in the config (EDA, finding 5)."""
     ids = list(cfg["data"]["death_discharge_ids"])
     if cfg["data"].get("exclude_hospice", True):
         ids += list(cfg["data"]["hospice_discharge_ids"])
@@ -97,11 +88,8 @@ def excluded_discharge_ids(cfg: dict) -> list:
 
 
 def clean_dataset(df: pd.DataFrame, cfg: dict, verbose: bool = False) -> pd.DataFrame:
-    """Apply every row filter decided in the EDA.
-
-    1. Remove deaths (and hospice, see config) -> cannot / should not be readmitted.
-    2. Remove the 3 rows with gender 'Unknown/Invalid'.
-    """
+    """Row filters decided in the EDA: deaths + hospice (finding 5), and the 3 rows
+    with gender 'Unknown/Invalid', too few to analyse (EDA, fairness section)."""
     n0 = len(df)
     df = remove_impossible_readmissions(df, excluded_discharge_ids(cfg))
     n1 = len(df)
@@ -118,16 +106,13 @@ def clean_dataset(df: pd.DataFrame, cfg: dict, verbose: bool = False) -> pd.Data
 # Splitting
 # --------------------------------------------------------------------------- #
 def make_cv(n_splits: int, seed: int) -> StratifiedGroupKFold:
-    """Cross-validator that is grouped by patient AND stratified on the target.
-
-    Use the same object for Optuna's cross-validation inside the training
-    set, passing groups=train[GROUP_COL].
-    """
+    """Grouped by patient AND stratified on the target, so GroupKFold + StratifiedKFold (cf. S1).
+    Reused for the Optuna CV inside train, with groups=train[GROUP_COL] (guidelines, step 6)."""
     return StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=seed)
 
 
 def _one_fold(df: pd.DataFrame, n_splits: int, seed: int):
-    """Hold out one fold of a StratifiedGroupKFold: (rest, held_out)."""
+    """Keep one fold as the held-out part, returns (rest, held_out)."""
     cv = make_cv(n_splits, seed)
     rest_idx, held_idx = next(cv.split(df, df[TARGET], groups=df[GROUP_COL]))
     return df.iloc[rest_idx].reset_index(drop=True), df.iloc[held_idx].reset_index(drop=True)
@@ -135,22 +120,17 @@ def _one_fold(df: pd.DataFrame, n_splits: int, seed: int):
 
 def split_train_val_test(df: pd.DataFrame, test_n_splits: int = 5,
                          val_n_splits: int = 5, seed: int = 42):
-    """Split into train / validation / test, grouped by patient and stratified.
-
-    - grouped: the same patient never appears in two different sets;
-    - stratified: each set keeps about the same share of positives (~11%).
-
-    GroupShuffleSplit is grouped but NOT stratified, which is why we use
-    StratifiedGroupKFold and keep a single fold each time.
-    """
+    """Train / val / test with no patient in two sets and ~11% positives in each (EDA, finding 2).
+    GroupShuffleSplit isn't stratified, so we keep 1 StratifiedGroupKFold fold each time (cf. S1)."""
     train_val, test = _one_fold(df, test_n_splits, seed)
     train, val = _one_fold(train_val, val_n_splits, seed)
     return train, val, test
 
 
 def check_splits(splits: dict) -> pd.DataFrame:
-    """Check that no patient is shared between splits and report class balance."""
+    """Check that no patient is shared between splits, and show the class balance of each."""
     names = list(splits)
+    # a patient in two sets = leakage, the test score would be too optimistic (cf. S1)
     for i, a in enumerate(names):
         for b in names[i + 1:]:
             shared = set(splits[a][GROUP_COL]) & set(splits[b][GROUP_COL])
@@ -166,7 +146,7 @@ def check_splits(splits: dict) -> pd.DataFrame:
 
 
 def build_splits(cfg: dict | None = None):
-    """Load, clean and split the data using the settings in config.yaml."""
+    """Load, clean and split with the settings from config.yaml."""
     cfg = cfg or load_config()
     df = clean_dataset(load_dataset(), cfg, verbose=True)
     return split_train_val_test(
@@ -182,6 +162,7 @@ def main():
     train, val, test = build_splits(cfg)
     splits = {"train": train, "val": val, "test": test}
     print(check_splits(splits))
+    # saved once so every later script uses exactly the same split
     for name, part in splits.items():
         part.to_pickle(DATA_DIR / f"{name}.pkl")
     print(f"Saved train / val / test to {DATA_DIR}")
@@ -189,3 +170,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# AI assistant used to double-check the code.
