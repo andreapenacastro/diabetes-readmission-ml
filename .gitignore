@@ -224,3 +224,4 @@ data/
 *.pkl
 *.joblib
 .DS_Store
+_to_delete/
