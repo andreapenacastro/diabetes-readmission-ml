@@ -94,6 +94,9 @@ def prepare_features(df):
     """Renvoie X, y pour un split (train, val ou test)."""
     df = add_engineered_features(df)
     X = df[NUM_FEATURES + CAT_FEATURES].copy()
+    # codes *_id : toujours "1" (pas "1.0"), quel que soit l'ordi, pour que l'API colle à l'entraînement (aide IA)
+    for col in ["admission_type_id", "discharge_disposition_id", "admission_source_id"]:
+        X[col] = X[col].map(lambda v: str(int(float(v))) if pd.notna(v) else np.nan)
     # catégorielles en texte pour le OneHotEncoder, les NaN restent NaN (aide IA)
     for col in CAT_FEATURES:
         s = X[col].astype(object).replace("?", np.nan)
