@@ -16,7 +16,7 @@ from src.features import prepare_features
 from src.paths import DATA_DIR, FIG_DIR, LOG_DIR, MODEL_DIR
 from src.train import RESULTS_DIR, evaluate_model, make_pipeline
 
-N_TRIALS = 3  # mettre 3 pour un test rapide
+N_TRIALS = 30  # mettre 3 pour un test rapide
 SEED = 42
 
 
