@@ -1,4 +1,4 @@
-scikit-learn
+scikit-learn>=1.6
 pandas
 numpy
 scipy
@@ -10,3 +10,6 @@ pyyaml
 fastapi
 uvicorn
 seaborn
+lightgbm
+joblib
+pydantic
